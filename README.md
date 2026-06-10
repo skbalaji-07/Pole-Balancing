@@ -1,153 +1,188 @@
-# EX.1 Pole Balancing using Reinforcement Learning
-## Date: 09-05-2026
+<H3 ALIGN=RIGHT> DATE:<H3>
 
-## Aim
-The aim of this project is to develop a Reinforcement Learning agent that learns to balance a pole on a moving cart by interacting with the environment and maximizing cumulative rewards.
+<H1 ALIGN=CENTER> Experiment-1: Implementation of Bayesian Networks</H1>
 
-# Algorithm
+### Name: Balaji SK
+### Register Number: 2305003001
 
-## Q-Learning Algorithm for Pole Balancing
 
-### Step 1
-Initialize the CartPole environment.
+## Aim:
 
-### Step 2
-Initialize the Q-table with zeros.
+To create a Bayesian Network for the given dataset in Python.
 
-### Step 3
-Observe the current state of the environment.
+    
+## Algorithm:
 
-### Step 4
-Choose an action using the epsilon-greedy policy:
-- Exploration → Random action
-- Exploitation → Best action from Q-table
+**Step 1:** Import necessary libraries: pandas, networkx, matplotlib.pyplot, Bbn, Edge, EdgeType, BbnNode, Variable, EvidenceBuilder, InferenceController.
 
-### Step 5
-Perform the selected action.
+**Step 2:** Set pandas options to display more columns.
 
-### Step 6
-Receive:
-- Reward
-- Next state
-- Done status
+**Step 3:** Read in weather data from a CSV file using pandas.
 
-### Step 7
-Update the Q-value using:
+**Step 4:** Remove records where the target variable RainTomorrow has missing values.
 
-Q(s,a) = Q(s,a) + α [ r + γ max Q(s',a') − Q(s,a) ]
+**Step 5:** Fill in missing values in other columns with the column mean.
 
-Where:
-- α → Learning rate
-- γ → Discount factor
+**Step 6:** Create bands for variables that will be used in the model (Humidity9amCat, Humidity3pmCat, and WindGustSpeedCat).
 
-### Step 8
-Repeat the process until the episode ends.
+**Step 7:** Define a function to calculate probability distributions, which go into the Bayesian Belief Network (BBN).
 
-### Step 9
-Train the agent for multiple episodes to improve balancing performance.
+**Step 8:** Create BbnNode objects for Humidity9amCat, Humidity3pmCat, WindGustSpeedCat, and RainTomorrow, using the probs() function to calculate their probabilities.
+
+**Step 9:** Create a Bbn object and add the BbnNode objects to it, along with edges between the nodes.
+
+**Step 10:** Convert the BBN to a join tree using the InferenceController.
+
+**Step 11:** Set node positions for the graph.
+
+**Step 12:** Set options for the graph appearance.
+
+**Step 13:** Generate the graph using network
+
+**Step 14:** Update margins and display the graph using matplotlib.pyplot.
 
 ---
 
-# Program
+## Program:
 
-```
-#Pole Balancing
+```python
+import networkx as nx
+import pandas as pd
+import matplotlib.pyplot as plt
+from pybbn.graph.dag import Bbn
+from pybbn.graph.dag import Edge, EdgeType
+from pybbn.graph.jointree import EvidenceBuilder
+from pybbn.graph.node import BbnNode
+from pybbn.graph.variable import Variable
+from pybbn.pptc.inferencecontroller import InferenceController
 
-import numpy as np
-import gymnasium as gym
+# Display up to 50 columns in pandas DataFrame
+pd.options.display.max_columns = 50
 
-# Create environment (modern version)
-env = gym.make("CartPole-v1")
+# Load the CSV file
+df = pd.read_csv('weatherAUS.csv', encoding='utf-8')
 
-# Discretization
-buckets = (1, 1, 6, 12)
-Q = np.zeros(buckets + (env.action_space.n,))
+# Filter out rows with null values in the 'RainTomorrow' column
+df = df[pd.isnull(df['RainTomorrow']) == False]
 
-# Hyperparameters
-alpha = 0.1
-gamma = 0.99
-epsilon = 1.0
-epsilon_decay = 0.995
-epsilon_min = 0.01
-episodes = 3000
+# Fill NaN values only for numeric columns
+df = df.fillna(df.mean(numeric_only=True))
 
-# Discretize continuous state
-def discretize(obs):
-    upper = [2.4, 3.0, 0.2095, 3.5]
-    lower = [-2.4, -3.0, -0.2095, -3.5]
+# Apply categorical transformations
+df['WindGustSpeedCat'] = df['WindGustSpeed'].apply(lambda x: '0.<=40' if x <= 40 else '1.40-50' if 40 < x <= 50 else '2.>50')
+df['Humidity9amCat'] = df['Humidity9am'].apply(lambda x: '1.>60' if x > 60 else '0.<=60')
+df['Humidity3pmCat'] = df['Humidity3pm'].apply(lambda x: '1.>60' if x > 60 else '0.<=60')
 
-    ratios = [(obs[i] - lower[i]) / (upper[i] - lower[i]) for i in range(len(obs))]
-    new_obs = [int(r * (buckets[i] - 1)) for i, r in enumerate(ratios)]
-    new_obs = [min(buckets[i] - 1, max(0, new_obs[i])) for i in range(len(obs))]
+# Print the DataFrame to check if transformations are correct
+print(df.head())
 
-    return tuple(new_obs)
-
-# --- TRAINING ---
-for ep in range(episodes):
-    obs, _ = env.reset()
-    state = discretize(obs)
-    done = False
-
-    while not done:
-        # ε-greedy policy
-        if np.random.rand() < epsilon:
-            action = env.action_space.sample()
+# Function to calculate probabilities
+def probs(data, child, parent1=None, parent2=None):
+    if parent1 is None:
+        # Calculate probabilities for a node without parents
+        prob = pd.crosstab(data[child], 'Empty', margins=False, normalize='columns').sort_index().to_numpy().reshape(-1).tolist()
+    else:
+        # Check if the child node has 1 parent or 2 parents
+        if parent2 is None:
+            # Calculate probabilities for a node with 1 parent
+            prob = pd.crosstab(data[parent1], data[child], margins=False, normalize='index').sort_index().to_numpy().reshape(-1).tolist()
         else:
-            action = np.argmax(Q[state])
+            # Calculate probabilities for a node with 2 parents
+            prob = pd.crosstab([data[parent1], data[parent2]], data[child], margins=False, normalize='index').sort_index().to_numpy().reshape(-1).tolist()
+    return prob
 
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        done = terminated or truncated
+# Define nodes with variables and probabilities
+H9am = BbnNode(Variable(0, 'H9am', ['<=60', '>60']), probs(df, child='Humidity9amCat'))
+H3pm = BbnNode(Variable(1, 'H3pm', ['<=60', '>60']), probs(df, child='Humidity3pmCat', parent1='Humidity9amCat'))
+W = BbnNode(Variable(2, 'W', ['<=40', '40-50', '>50']), probs(df, child='WindGustSpeedCat'))
+RT = BbnNode(Variable(3, 'RT', ['No', 'Yes']), probs(df, child='RainTomorrow', parent1='Humidity3pmCat', parent2='WindGustSpeedCat'))
 
-        # Slightly improved reward (optional but simple)
-        angle = next_obs[2]
-        reward = 1 - abs(angle)
+# Create the Bayesian Belief Network
+bbn = Bbn() \
+    .add_node(H9am) \
+    .add_node(H3pm) \
+    .add_node(W) \
+    .add_node(RT) \
+    .add_edge(Edge(H9am, H3pm, EdgeType.DIRECTED)) \
+    .add_edge(Edge(H3pm, RT, EdgeType.DIRECTED)) \
+    .add_edge(Edge(W, RT, EdgeType.DIRECTED))
 
-        next_state = discretize(next_obs)
+# Apply inference
+join_tree = InferenceController.apply(bbn)
 
-        # Q-learning update
-        Q[state][action] += alpha * (
-            reward + gamma * np.max(Q[next_state]) - Q[state][action]
-        )
+# Set positions for nodes in the graph
+pos = {0: (-1, 2), 1: (-1, 0.5), 2: (1, 0.5), 3: (0, -1)}
 
-        state = next_state
+# Define graph drawing options
+options = {
+    "font_size": 16,
+    "node_size": 4000,
+    "node_color": "white",
+    "edgecolors": "black",
+    "edge_color": "red",
+    "linewidths": 5,
+    "width": 5,
+}
 
-    epsilon = max(epsilon_min, epsilon * epsilon_decay)
+# Convert the BBN to a NetworkX graph and draw it
+n, d = bbn.to_nx_graph()
 
-    if ep % 500 == 0:
-        print(f"Episode {ep}, Epsilon: {epsilon:.3f}")
+fig, ax = plt.subplots(figsize=(6, 6))
 
-print("Training Completed!")
+nx.draw(n, pos=pos, with_labels=True, labels=d, ax=ax, **options)
 
-
-# --- TESTING ---
-obs, _ = env.reset()
-done = False
-total_reward = 0
-
-while not done:
-    state = discretize(obs)
-    action = np.argmax(Q[state])
-
-    obs, reward, terminated, truncated, _ = env.step(action)
-    done = terminated or truncated
-
-    total_reward += reward
-
-env.close()
-print("Test Reward:", total_reward)
+ax.margins(0.10)
+plt.axis("off")
+plt.show()
 
 ```
 
-# Output
+---
 
-<img width="340" height="168" alt="Screenshot 2026-05-09 141059" src="https://github.com/user-attachments/assets/c1f75fee-50ac-47fd-97bb-d67af1b2392b" />
+## Output:
+```
+Date Location  MinTemp  MaxTemp  Rainfall  Evaporation  Sunshine  \
+0  01-12-2008   Albury     13.4     22.9       0.6     5.469824  7.624853   
+1  02-12-2008   Albury      7.4     25.1       0.0     5.469824  7.624853   
+2  03-12-2008   Albury     12.9     25.7       0.0     5.469824  7.624853   
+3  04-12-2008   Albury      9.2     28.0       0.0     5.469824  7.624853   
+4  05-12-2008   Albury     17.5     32.3       1.0     5.469824  7.624853   
+
+  WindGustDir  WindGustSpeed WindDir9am WindDir3pm  WindSpeed9am  \
+0           W           44.0          W        WNW          20.0   
+1         WNW           44.0        NNW        WSW           4.0   
+2         WSW           46.0          W        WSW          19.0   
+3          NE           24.0         SE          E          11.0   
+4           W           41.0        ENE         NW           7.0   
+
+   WindSpeed3pm  Humidity9am  Humidity3pm  Pressure9am  Pressure3pm  Cloud9am  \
+0          24.0         71.0         22.0       1007.7       1007.1  8.000000   
+1          22.0         44.0         25.0       1010.6       1007.8  4.437189   
+2          26.0         38.0         30.0       1007.6       1008.7  4.437189   
+3           9.0         45.0         16.0       1017.6       1012.8  4.437189   
+4          20.0         82.0         33.0       1010.8       1006.0  7.000000   
+
+   Cloud3pm  Temp9am  Temp3pm RainToday  RISK_MM RainTomorrow  \
+0  4.503167     16.9     21.8        No      0.0           No   
+1  4.503167     17.2     24.3        No      0.0           No   
+2  2.000000     21.0     23.2        No      0.0           No   
+3  4.503167     18.1     26.5        No      1.0           No   
+4  8.000000     17.8     29.7        No      0.2           No   
+
+  WindGustSpeedCat Humidity9amCat Humidity3pmCat  
+0          1.40-50          1.>60         0.<=60  
+1          1.40-50         0.<=60         0.<=60  
+2          1.40-50         0.<=60         0.<=60  
+3           0.<=40         0.<=60         0.<=60  
+4          1.40-50          1.>60         0.<=60
+```
+
+
+<img width="484" height="482" alt="image" src="https://github.com/user-attachments/assets/3406da59-fed6-4403-8d98-671946b2bdf3" />
 
 
 
+---
 
-**# Result**
-
-The Reinforcement Learning agent successfully learned to balance the pole using the Q-Learning algorithm.  
-The reward increased gradually with training episodes, demonstrating that the agent improved its balancing strategy through learning and interaction with the environment.
-
-
+## Result:
+   Thus, a Bayesian Network is generated using Python.
